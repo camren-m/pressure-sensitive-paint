@@ -1,13 +1,13 @@
-import pathlib
 import numpy as np
 import cv2
 import pint
 import core.frames as frames
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 ureg = pint.UnitRegistry()
 
-def pressure_from_path(cine_path: pathlib.Path):
+def pressure_from_path(cine_path: Path):
     split = cine_path.stem.split(" ")
 
     if len(split) != 2:
@@ -23,11 +23,11 @@ def pressure_from_path(cine_path: pathlib.Path):
 
 class ExperimentalCapture:
     @classmethod
-    def from_cine(cls, cine_path: pathlib.Path):
+    def from_cine(cls, cine_path: Path):
         return cls(frames.load_from_cine(cine_path), pressure_from_path(cine_path))
 
     @classmethod
-    def from_folder(cls, folder_path: pathlib.Path):
+    def from_folder(cls, folder_path: Path):
         return [cls.from_cine(f) for f in folder_path.iterdir() if f.is_file()]
     
     def __init__(self, frames: list[np.ndarray], pressure: pint.Quantity):

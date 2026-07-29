@@ -1,6 +1,6 @@
 import core.calibration as calibration
 import click
-import pathlib
+from pathlib import Path
 
 @click.group()
 def cli():
@@ -24,7 +24,7 @@ def cli():
     default = 1013.25,
 )
 def generate_calibration(data_dir_path, atmospheric_pressure):
-    data_dir = pathlib.Path(data_dir_path).resolve()
+    data_dir = Path(data_dir_path).resolve()
     if not data_dir.exists():
         raise Exception(f"Failed to find path {data_dir_path}")
 

@@ -1,8 +1,8 @@
 import numpy as np
 import pycine.raw as cine
-import pathlib
+from pathlib import Path
 
-def load_from_cine(cine_path: str | pathlib.Path, trim_range: tuple[int, int] | None = None, output_fps = 30):
+def load_from_cine(cine_path: str | Path, trim_range: tuple[int, int] | None = None, output_fps = 30) -> list[np.ndarray]:
     """
     Loads all frames from a given `cine_path`, optionally trimming for `range`, and remapping frames at `output_fps`
     """

@@ -1,7 +1,3 @@
-# Inputs/outputs
-data/
-figures/
-
 # Python artifacts
 __pycache__/
 *.py[cod]
