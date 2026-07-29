@@ -1,4 +1,5 @@
 import numpy as np
+import cv2
 import pycine.raw as cine
 from pathlib import Path
 
@@ -29,6 +30,9 @@ def load_from_cine(cine_path: str | Path, trim_range: tuple[int, int] | None = N
             selected_frames.append(frame)
 
     return selected_frames
+
+def blur(frames: list[np.ndarray], amount: int = 5):
+    return [cv2.GaussianBlur(frame, (amount, amount), 0) for frame in frames]
 
 def mean(frames: list[np.ndarray]):
     stacked = np.stack(frames).astype(np.float64)

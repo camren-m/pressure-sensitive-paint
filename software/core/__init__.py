@@ -43,12 +43,3 @@ def normalize_map(pressure_map, p_min=None, p_max=None):
 
 def load_calibration_table(path):
     return pd.read_csv(path)
-
-def fit_calibration_from_table(table, I_ref, Pref):
-    ratios = I_ref / table['intensity'].values
-    pressures = table['pressure'].values
-    
-    x = pressures / Pref
-    B, A = np.polyfit(x, ratios, 1)
-    
-    return A, B

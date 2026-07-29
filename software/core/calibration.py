@@ -1,8 +1,10 @@
 import numpy as np
 import cv2
 import pint
+import math
 import core.frames as frames
 import matplotlib.pyplot as plt
+from numpy.polynomial import Polynomial
 from pathlib import Path
 
 ureg = pint.UnitRegistry()
@@ -45,11 +47,12 @@ class ExperimentalCapture:
 
         return ExperimentalCapture(cropped_frames, self.pressure)
 
-    def mean_frame(self):
+    def mean_frame(self, blur_amount = 7):
         """
-        Returns the mean of all frames in this capture, lazily calculated
+        Returns the mean of all blurred frames in this capture, lazily calculated
         """
-        self.__mean_frame = self.__mean_frame or frames.mean(self.frames)
+        assert blur_amount % 2 == 1, "blur_amount must be odd"
+        self.__mean_frame = self.__mean_frame if self.__mean_frame is not None else frames.mean(frames.blur(self.frames, blur_amount))
         return self.__mean_frame
 
 def select_ROI(frame: np.ndarray):
@@ -58,22 +61,43 @@ def select_ROI(frame: np.ndarray):
     return cv2.selectROI("Select region of interest", normalized_reference_frame, False)
 
 def prompt_crop_captures(captures: list[ExperimentalCapture]):
-    rect = select_ROI(captures[1].frames[1])
+    rect = select_ROI(captures[1].mean_frame())
     return [f.crop(rect) for f in captures]
+
+def get_I_ref(map: dict[float, float]) -> float:
+    I_ref = next((I for P, I in map.items() if P == 0.0), None)
+    if not I_ref:
+        raise Exception("No wind-off capture provided. Cannot compute ratios")
+    return I_ref
 
 def create_pressure_intensity_map(captures: list[ExperimentalCapture]) -> dict[float, float]:
     pressure_intensity_map = {}
     
     for capture in captures:
-        pressure_intensity_map[capture.pressure.to(ureg.pascal).magnitude] = capture.mean_frame().mean() / 255
+        I = capture.mean_frame().mean() / 255
+        pressure_intensity_map[capture.pressure.to(ureg.pascal).magnitude] = I
 
     return pressure_intensity_map
 
-def plot_pressure_v_intensity(pressure_intensity_map: dict[float, float]):
-    sorted_data = sorted(pressure_intensity_map.items())
+def fit_pressure_intensity_curve(map: dict[float, float], I_ref: float, P_ref: float) -> Polynomial:
+    x = [P / P_ref for P in map.keys()]
+    y = [I_ref / I for I in map.values()]
+    return Polynomial.fit(x, y, 1)
+
+def plot_pressure_v_intensity(pressure_intensity_map: dict[float, float], P_ref: float) -> Polynomial:
+    I_ref = get_I_ref(pressure_intensity_map)
+    poly = fit_pressure_intensity_curve(pressure_intensity_map, I_ref, P_ref)
+
+    sorted_data = sorted([P / P_ref, I_ref / I] for P, I in pressure_intensity_map.items())
     x, y = zip(*sorted_data)
+    x_fit = np.linspace(min(x), max(x), 500)
+    y_fit = poly(x_fit)
+    plt.plot(x_fit, y_fit, label=str(poly.convert()), color="black")
     plt.plot(x, y, marker="o", linestyle="-", color="blue")
-    plt.xlabel("Surface Pressure (pascal)")
-    plt.ylabel("Mean Intensity (unitless)")
+    plt.title("Pressure ratio v. Intensity ratio")
+    plt.xlabel("P / P_ref")
+    plt.ylabel("I_ref / I")
     plt.grid(True)
+    plt.legend()
     plt.show()
+    return poly
