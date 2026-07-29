@@ -4,3 +4,4 @@
 # Inputs/outputs
 data/
 figures/
+*.poly
