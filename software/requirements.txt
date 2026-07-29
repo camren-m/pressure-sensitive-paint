@@ -1,0 +1,7 @@
+pycine
+numpy
+opencv-python
+click
+pandas
+matplotlib
+pint
