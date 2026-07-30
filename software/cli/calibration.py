@@ -23,15 +23,18 @@ from core import calibration
 @click.option(
     "--atmospheric-pressure",
     "atmospheric_pressure",
-    type = click.FloatRange(500, 2000),
-    help = "The atmospheric pressure value in hPa",
-    default = 1013.25,
+    type = click.FLOAT,
+    help = "The atmospheric pressure value in Pa",
+    default = 101325.0,
 )
 def generate_calibration(data_dir_path: Path, output_file_path: Path, atmospheric_pressure: float):
     captures = calibration.ExperimentalCapture.from_folder(data_dir_path)
-    cropped_captures = calibration.prompt_crop_captures(captures)
+    wind_off_capture = next((f for f in captures if f.rel_pressure == 0.0), None)
+    assert wind_off_capture is not None, "No wind-off capture found in data directory. Please include a .cine file with a pressure of 0.00 Pa"
+    aligned_captures = [f.align(wind_off_capture) for f in captures]
+    cropped_captures = calibration.prompt_crop_captures(aligned_captures)
 
-    pressure_intensity_map = calibration.create_pressure_intensity_map(cropped_captures)
+    pressure_intensity_map = calibration.create_pressure_intensity_map(cropped_captures, atmospheric_pressure)
     calibration_curve = calibration.plot_pressure_v_intensity(pressure_intensity_map, atmospheric_pressure).convert()
 
     with open(output_file_path, "w") as output_file:

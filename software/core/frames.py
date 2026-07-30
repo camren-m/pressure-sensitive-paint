@@ -5,27 +5,31 @@ from pathlib import Path
 
 def load_from_cine(cine_path: str | Path, trim_range: tuple[int, int] | None = None, output_fps = 30) -> list[np.ndarray]:
     """
-    Loads all frames from a given `cine_path`, optionally trimming for `range`, and remapping frames at `output_fps`
+    Loads frames from a given `cine_path`, optionally trimming the frame range and resampling at `output_fps`.
     """
+    print(f"Loading frames from {cine_path}...")
     header = cine.read_header(cine_path)
     capture_fps = header["setup"].FrameRate
     frame_count = header["cinefileheader"].ImageCount
 
-    start_frame = trim_range[0] if trim_range else 0
-    end_frame = trim_range[1] if trim_range else frame_count
-    
-    raw_frames, _, _ = cine.read_frames(cine_path, start_frame=start_frame, count=frame_count) # type: ignore
-        
-    stride = round(capture_fps / output_fps)
-    if stride < 1:
-        stride = 1
-    
+    if trim_range is None:
+        start_frame, end_frame = 0, frame_count
+    else:
+        start_frame, end_frame = trim_range
+        if start_frame < 0 or end_frame < 0:
+            raise ValueError("trim_range values must be non-negative")
+        if end_frame < start_frame:
+            raise ValueError("trim_range end must be greater than or equal to the start")
+        end_frame = min(end_frame, frame_count)
+
+    count = max(0, end_frame - start_frame)
+    raw_frames, _, _ = cine.read_frames(cine_path, start_frame=start_frame, count=count) # type: ignore
+
+    stride = max(1, round(capture_fps / output_fps))
     frame_indices = range(start_frame, end_frame, stride)
-    count = end_frame - start_frame
 
     selected_frames = []
-    for i, frame in enumerate(raw_frames):
-        actual_frame_number = start_frame + i
+    for actual_frame_number, frame in enumerate(raw_frames, start=start_frame):
         if actual_frame_number in frame_indices:
             selected_frames.append(frame)
 

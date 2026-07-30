@@ -5,8 +5,27 @@ from pathlib import Path
 from cli.group import cli
 from core import process,capture
 
+RESIZE_WIDTH = 1280
+
 def nothing(x):
     pass
+
+def respectfully_resize(image: cv2.typing.MatLike, width: float | None = None, height: float | None = None, inter: int = cv2.INTER_AREA):
+    """
+    Resizes `image` while maintaining aspect ratio.
+    """
+    dim = None
+    (h, w) = image.shape[:2]
+
+    if width is None and height is not None:
+        r = height / float(h)
+        dim = (int(w * r), height)
+    else:
+        assert width is not None, "Width must be provided if height is None"
+        r = width / float(w)
+        dim = (width, int(h * r))
+
+    return cv2.resize(image, dim, interpolation=inter) # type: ignore
 
 @cli.command(
     help = "Compares one capture to a wind-off capture, given a calibration file."
@@ -38,10 +57,12 @@ def process_capture(wind_off_path: Path, wind_on_path: Path, calibration_file_pa
     with open(calibration_file_path, "r") as calibration_file:
         A, B, P_ref = [float(x) for x in calibration_file.read().split(",")]
 
-    wind_off_frame = capture.ExperimentalCapture.from_cine(wind_off_path).post_process()
-    wind_on_frame = capture.ExperimentalCapture.from_cine(wind_on_path).post_process() # TODO: align wind on with wind off
+    wind_off_capture = capture.ExperimentalCapture.from_cine(wind_off_path)
+    wind_off_frame = wind_off_capture.mean_frame()
+    wind_on_capture = capture.ExperimentalCapture.from_cine(wind_on_path).align(wind_off_capture)
+    wind_on_frame = wind_on_capture.mean_frame()
     ratio_map = process.compute_ratio(wind_off_frame, wind_on_frame)
-    pressure_map = process.ratio_to_pressure(ratio_map, A, B, P_ref)
+    pressure_map = cv2.GaussianBlur(process.ratio_to_pressure(ratio_map, A, B, P_ref), (process.PROCESSING_BLUR_AMOUNT, process.PROCESSING_BLUR_AMOUNT), 0)
 
     title = f"Pressure map ({wind_on_path.stem} v. {wind_off_path.stem})"
     cv2.namedWindow(title)
@@ -50,11 +71,15 @@ def process_capture(wind_off_path: Path, wind_on_path: Path, calibration_file_pa
     cv2.setTrackbarPos("P_max", title, round(pressure_map.max() - pressure_map.min()))
 
     cursor_pressure: float = 0
+    ratio = pressure_map.shape[1] / RESIZE_WIDTH
+    mouse_x, mouse_y = 0, 0
     def mouse_callback(event, x, y, flags, params):
         nonlocal cursor_pressure
+        nonlocal mouse_x, mouse_y
+        mouse_x, mouse_y = round(x * ratio), round(y * ratio)
 
         if event == cv2.EVENT_MOUSEMOVE:
-            cursor_pressure = pressure_map[y][x] # type: ignore
+            cursor_pressure = pressure_map[mouse_y][mouse_x] # type: ignore
     cv2.setMouseCallback(title, mouse_callback)
 
     while True:
@@ -65,14 +90,14 @@ def process_capture(wind_off_path: Path, wind_on_path: Path, calibration_file_pa
             cv2.setTrackbarPos("P_min", title, max_val)
             min_val = max_val
 
-        min_val -= abs(pressure_map.min())
-        max_val -= abs(pressure_map.min())
+        min_val -= abs(pressure_map.min()) # type: ignore
+        max_val -= abs(pressure_map.min()) # type: ignore
 
-        normalized_pressure_map = process.normalize_map(pressure_map, min_val, max_val)
+        normalized_pressure_map = process.normalize_map(pressure_map, 725, 1300)
         colorized_pressure_map = cv2.applyColorMap(normalized_pressure_map, cv2.COLORMAP_JET)
 
-        cv2.putText(colorized_pressure_map, f"P at cursor: {cursor_pressure:.3f} Pa", (0, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
-        cv2.imshow(title, colorized_pressure_map)
+        #cv2.putText(colorized_pressure_map, f"P at ({mouse_x}, {mouse_y}): {cursor_pressure:.3f} Pa (scale from {min_val:.3f} to {max_val:.3f})", (0, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
+        cv2.imshow(title, respectfully_resize(colorized_pressure_map, width=RESIZE_WIDTH))
     
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
